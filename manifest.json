@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Gemini Nano Autofill",
+  "version": "1.0",
+  "description": "Uses Gemini Nano to autofill text boxes on a webpage.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
