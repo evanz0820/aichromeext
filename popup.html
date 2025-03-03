@@ -2,11 +2,93 @@
 <html>
 <head>
   <title>Gemini Autofill</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      width: 320px;
+      padding: 10px;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    h1 {
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    input {
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      padding: 8px 12px;
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:hover {
+      background-color: #3367d6;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 10px;
+      padding: 8px;
+      background-color: #f1f1f1;
+      border-radius: 4px;
+      min-height: 20px;
+    }
+    .footer {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #666;
+    }
+    .loading {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border: 2px solid #ccc;
+      border-radius: 50%;
+      border-top-color: #333;
+      animation: spin 1s linear infinite;
+      margin-right: 5px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
-  <input type="text" id="apiKeyInput" placeholder="Enter your Gemini API key">
-  <button id="saveApiKeyButton">Save API Key</button>
-  <button id="autofillButton">Autofill</button>
+  <div class="container">
+    <h1>Gemini Autofill</h1>
+    
+    <div class="input-group">
+      <label for="apiKeyInput">Gemini API Key:</label>
+      <input type="text" id="apiKeyInput" placeholder="Enter your Gemini API key">
+    </div>
+    
+    <button id="saveApiKeyButton">Save API Key</button>
+    <button id="autofillButton">Autofill This Page</button>
+    
+    <div class="status" id="status">Loading...</div>
+    
+    <div class="footer">
+      This extension uses Google Gemini to automatically fill form fields based on page context.
+    </div>
+  </div>
+  
   <script src="popup.js"></script>
 </body>
 </html>

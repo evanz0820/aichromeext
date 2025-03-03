@@ -1,120 +1,137 @@
 document.addEventListener('DOMContentLoaded', () => {
-  if (chrome && chrome.storage && chrome.storage.local) { //Check if chrome storage exists.
-      chrome.storage.local.get('geminiApiKey', (data) => {
-          if (data.geminiApiKey) {
-              document.getElementById('apiKeyInput').value = data.geminiApiKey;
-          }
-      });
+  if (chrome && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get('geminiApiKey', (data) => {
+      if (data.geminiApiKey) {
+        document.getElementById('apiKeyInput').value = data.geminiApiKey;
+      }
+    });
   } else {
-      console.error("Chrome storage API is not available.");
+    console.error("Chrome storage API is not available.");
+    showStatus("Error: Chrome storage API unavailable", true);
   }
+  
+  updatePageInfo();
 });
 
-document.getElementById('saveApiKeyButton').addEventListener('click', () => {
-  if (chrome && chrome.storage && chrome.storage.local) {
-      const apiKey = document.getElementById('apiKeyInput').value;
-      chrome.storage.local.set({ geminiApiKey: apiKey }, () => {
-          alert('API key saved!');
-      });
+function showStatus(message, isError = false) {
+  const statusElement = document.getElementById('status');
+  statusElement.textContent = message;
+  
+  if (isError) {
+    statusElement.style.backgroundColor = '#ffebee';
+    statusElement.style.color = '#c62828';
   } else {
-      console.error("Chrome storage API is not available.");
+    statusElement.style.backgroundColor = '#f1f1f1';
+    statusElement.style.color = '#000000';
+  }
+}
+
+function showLoading(message) {
+  const statusElement = document.getElementById('status');
+  const loadingSpinner = document.createElement('span');
+  loadingSpinner.className = 'loading';
+  
+  statusElement.textContent = '';
+  statusElement.appendChild(loadingSpinner);
+  statusElement.appendChild(document.createTextNode(' ' + message));
+}
+
+function updatePageInfo() {
+  showLoading("Checking page...");
+  
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const activeTab = tabs[0];
+    
+    if (!activeTab.url || activeTab.url.startsWith('chrome://')) {
+      showStatus("Cannot run extension on this page.", true);
+      document.getElementById('autofillButton').disabled = true;
+      return;
+    }
+    
+    try {
+      chrome.tabs.sendMessage(activeTab.id, { action: "getPageInfo" }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.log("Content script not loaded yet, injecting...", chrome.runtime.lastError);
+          
+          chrome.scripting.executeScript({
+            target: { tabId: activeTab.id },
+            files: ['content.js']
+          }, () => {
+            if (chrome.runtime.lastError) {
+              showStatus("Error: " + chrome.runtime.lastError.message, true);
+            } else {
+              setTimeout(updatePageInfo, 500);
+            }
+          });
+          return;
+        }
+        
+        if (response && response.success) {
+          showStatus(`Ready to autofill ${response.inputCount} input fields on this page.`);
+          document.getElementById('autofillButton').disabled = response.inputCount === 0;
+        } else {
+          showStatus("Could not get page information.", true);
+        }
+      });
+    } catch (err) {
+      showStatus("Error: " + err.message, true);
+    }
+  });
+}
+
+document.getElementById('saveApiKeyButton').addEventListener('click', () => {
+  const apiKey = document.getElementById('apiKeyInput').value.trim();
+  
+  if (!apiKey) {
+    showStatus("Please enter a valid API key", true);
+    return;
+  }
+  
+  showLoading("Saving API key...");
+  
+  if (chrome && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.set({ geminiApiKey: apiKey }, () => {
+      if (chrome.runtime.lastError) {
+        showStatus("Error saving API key: " + chrome.runtime.lastError.message, true);
+      } else {
+        showStatus('API key saved successfully!');
+        setTimeout(() => updatePageInfo(), 1000);
+      }
+    });
+  } else {
+    showStatus("Error: Chrome storage API unavailable", true);
   }
 });
 
 document.getElementById('autofillButton').addEventListener('click', () => {
   if (chrome && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.get('geminiApiKey', (data) => {
-          if (!data.geminiApiKey) {
-              alert('Please enter and save your Gemini API key.');
-              return;
+    chrome.storage.local.get('geminiApiKey', (data) => {
+      if (!data.geminiApiKey) {
+        showStatus('Please enter and save your Gemini API key.', true);
+        return;
+      }
+      
+      showLoading('Starting autofill process...');
+      
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        chrome.tabs.sendMessage(
+          tabs[0].id, 
+          { action: "autofill", apiKey: data.geminiApiKey },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              showStatus('Error: ' + chrome.runtime.lastError.message, true);
+            }
           }
-          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-              chrome.scripting.executeScript({
-                  target: { tabId: tabs[0].id },
-                  function: autofill,
-                  args: [data.geminiApiKey],
-              });
-          });
+        );
       });
+    });
   } else {
-      console.error("Chrome storage API is not available.");
+    showStatus("Error: Chrome storage API unavailable", true);
   }
 });
 
-async function autofill(apiKey) {
-  const pageText = document.body.innerText;
-  const textareas = document.querySelectorAll('textarea');
-  const inputs = document.querySelectorAll('input[type="text"]');
-  const allInputs = [...textareas, ...inputs];
-
-  if (allInputs.length === 0) {
-      alert("No text inputs found on this page.");
-      return;
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "showAlert") {
+    showStatus(request.message);
   }
-
-  async function generateText(prompt, apiKey) {
-      const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=' + apiKey; // Replace with the correct Gemini API endpoint
-
-      try {
-          const response = await fetch(url, {
-              method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                  contents: [{ parts: [{ text: prompt }] }],
-              }),
-          });
-
-          if (!response.ok) {
-              console.error('Gemini API error:', response);
-              alert('Gemini API error. Check console.');
-              return "Error generating text.";
-          }
-
-          const data = await response.json();
-          try {
-              return data.candidates[0].content.parts[0].text;
-          } catch (error) {
-              console.error("error parsing Gemini API response", data, error);
-              alert("Error parsing Gemini API response. Check console.");
-              return "Error parsing response.";
-          }
-      } catch (fetchError) {
-          console.error("Fetch error:", fetchError);
-          alert("Network error. Check console.");
-          return "Network error.";
-      }
-  }
-
-  for (const input of allInputs) {
-      const placeholder = input.placeholder;
-      const label = getLabelForElement(input);
-      const prompt = `Based on the following page content: "${pageText}" and the input field with placeholder "${placeholder}" and label "${label}", generate relevant text.`;
-
-      const generatedText = await generateText(prompt, apiKey);
-      input.value = generatedText;
-  }
-
-  function getLabelForElement(element) {
-    const id = element.id;
-    console.log("Input ID:", id); //Added console log
-    if (id) {
-        const label = document.querySelector(`label[for="${id}"]`);
-        if (label) {
-            console.log("Found label:", label.textContent.trim()); //added console log
-            return label.textContent.trim();
-        }
-    }
-    const parent = element.parentElement;
-    if (parent) {
-        const previousSibling = element.previousElementSibling;
-        if (previousSibling && previousSibling.tagName === 'LABEL') {
-            console.log("Found previous sibling label:", previousSibling.textContent.trim()); //added console log
-            return previousSibling.textContent.trim();
-        }
-    }
-    console.log("No label found."); //added console log
-    return "";
-  }
-}
+});
